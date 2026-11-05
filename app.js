@@ -3,6 +3,10 @@ const C = window.CONFIG;
 const tg = window.Telegram && Telegram.WebApp;
 if (tg) { try { tg.ready(); tg.expand(); tg.setHeaderColor('#0f1115'); tg.setBackgroundColor('#0f1115'); } catch (e) {} }
 const app = document.getElementById('app'), nav = document.getElementById('nav');
+const saver = () => store.get('saver', true);
+function hh(u) { let h = 0; for (const c of String(u)) h = (h * 31 + c.charCodeAt(0)) % 360; return h; }
+const paint = h => saver() ? h.replace(/<img [^>]*?src="([^"]*)"[^>]*>/g, (m, u) => `<i class="dot" style="--h:${hh(u)}"></i>`) : h.replace(/<img /g, '<img loading="lazy" decoding="async" ');
+(() => { const d = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML'); Object.defineProperty(app, 'innerHTML', { get() { return d.get.call(this); }, set(v) { d.set.call(this, paint(v)); } }); })();
 
 /* ---------- helpers ---------- */
 const store = {
@@ -18,17 +22,20 @@ const LIVE = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'SUSP', 'INT'];
 const DONE = ['FT', 'AET', 'PEN'];
 const MEDIA = 'https://media.api-sports.io/football/';
 const num = v => parseFloat(String(v ?? 0).replace('%', '')) || 0;
-const PRIORITY = [39, 2, 140, 3, 61, 78, 135, 848, 1, 6];
+const PRIORITY = [39, 2, 140, 3, 61, 78, 135, 848, 1, 6, 203];
 
 async function api(path, ttl = 300, map) {
   const key = 'c:' + path;
   const hit = store.get(key);
   if (hit && Date.now() - hit.t < ttl * 1000) return hit.d;
-  if (!C.API_KEY || C.API_KEY.startsWith('PASTE')) throw new Error('Add your API key in config.js first.');
-  const r = await fetch(C.BASE + path, { headers: { 'x-apisports-key': C.API_KEY } });
-  const j = await r.json();
-  const errs = j.errors && (Array.isArray(j.errors) ? j.errors : Object.values(j.errors));
-  if (errs && errs.length) throw new Error(errs.join(' | '));
+  let j;
+  try {
+    const r = await fetch(C.BASE + path);
+    if (!r.ok) throw new Error('Server error ' + r.status);
+    j = await r.json();
+    const errs = j.errors && (Array.isArray(j.errors) ? j.errors : Object.values(j.errors));
+    if (errs && errs.length) throw new Error(errs.join(' | '));
+  } catch (e) { if (hit) return hit.d; throw e; }
   let d = j.response || [];
   if (map) d = map(d);
   store.set(key, { t: Date.now(), d });
@@ -55,7 +62,7 @@ let timer = null;
 const loading = () => '<div class="loading">Loading…</div>';
 const errBox = e => `<div class="err"><b>Couldn't load data</b><br>${esc(e.message || e)}<br><button data-reload>Retry</button></div>`;
 const empty = t => `<div class="empty">${esc(t)}</div>`;
-const topBar = () => `<div class="top"><h1>${esc(C.APP_NAME)}</h1><button class="ico" data-go="#/search">🔍</button></div>`;
+const topBar = () => `<div class="top"><h1>${esc(C.APP_NAME)}</h1><div style="display:flex;gap:8px;align-items:center"><button class="ico" data-saver title="Data saver">${saver() ? '🖼' : '🚫'}</button><button class="ico" data-go="#/search">🔍</button></div></div>`;
 
 /* ---------- match rows ---------- */
 function rowHtml(f, withDate) {
@@ -96,8 +103,10 @@ async function pageMatches() {
   app.innerHTML = topBar() + strip + loading();
   try {
     const list = st.day === 'live' ? await api('/fixtures?live=all', 30) : await api(`/fixtures?date=${st.day}&timezone=${C.TZ}`, 300);
-    app.innerHTML = topBar() + strip + (list.length ? groupedByLeague(list) : empty(st.day === 'live' ? 'No live matches right now' : 'No matches on this day'));
-    if (st.day === 'live') timer = setInterval(route, 30000);
+    const shown = st.all === '1' ? list : list.filter(f => PRIORITY.includes(f.league.id));
+    const more = list.length > shown.length ? `<div style="text-align:center;padding:10px"><button class="chip on" data-set="all=1">Show ${list.length - shown.length} more matches</button></div>` : (st.all === '1' ? `<div style="text-align:center;padding:10px"><button class="chip on" data-set="all=0">Top leagues only</button></div>` : '');
+    app.innerHTML = topBar() + strip + (shown.length ? groupedByLeague(shown) : empty(list.length ? 'No top-league matches' : (st.day === 'live' ? 'No live matches right now' : 'No matches on this day'))) + more;
+    if (st.day === 'live') timer = setInterval(() => { if (!document.hidden) route(); }, 60000);
   } catch (e) { app.innerHTML = topBar() + strip + errBox(e); }
 }
 
@@ -193,7 +202,7 @@ async function pageLeague(id) {
     const se = info.seasons.find(s => s.year === st.season) || {};
     const pr = se.start && se.end ? Math.max(0, Math.min(100, (Date.now() - new Date(se.start)) / (new Date(se.end) - new Date(se.start)) * 100)) : 0;
     const tabs = ['Table', 'Matches', 'Player stats', 'Team stats'];
-    const head = `<div class="hero" style="--hc:#4a1111"><div class="hbar"><button data-back>‹</button><div>${starBtn('league', id, info.league.name, info.league.logo)}</div></div>
+    const head = `<div class="hero" style="--hc:hsl(${(id * 47) % 360},55%,24%)"><div class="hbar"><button data-back>‹</button><div>${starBtn('league', id, info.league.name, info.league.logo)}</div></div>
       <div class="hid"><img src="${info.league.logo}" alt=""><div><h2>${esc(info.league.name)}</h2><small>${esc(info.country.name)}</small><br><select data-season>${seasons.map(y => `<option ${y === st.season ? 'selected' : ''} value="${y}">${y}/${y + 1}</option>`).join('')}</select></div></div>
       <div class="bar"><i style="width:${pr}%"></i></div><div><span>${se.start ? fmtDate(se.start, { day: '2-digit', month: '2-digit' }) : ''}</span><span>${se.end ? fmtDate(se.end, { day: '2-digit', month: '2-digit' }) : ''}</span></div>
       <div class="tabs">${tabs.map(t => `<button class="${st.leagueTab === t ? 'on' : ''}" data-set="leagueTab=${t}">${t}</button>`).join('')}</div></div>`;
@@ -225,7 +234,7 @@ async function pageTeam(id) {
     const S = season();
     const t = (await api('/teams?id=' + id, 86400))[0];
     const tabs = ['Info', 'Matches', 'Table', 'Squad', 'Player stats', 'Team stats', 'Transfers'];
-    const head = `<div class="hero" style="--hc:#5a4710"><div class="hbar"><button data-back>‹</button><div>${starBtn('team', id, t.team.name, t.team.logo)}</div></div>
+    const head = `<div class="hero" style="--hc:hsl(${(id * 47) % 360},60%,30%)"><div class="hbar"><button data-back>‹</button><div>${starBtn('team', id, t.team.name, t.team.logo)}</div></div>
       <div class="hid"><img src="${t.team.logo}" alt=""><div><h2>${esc(t.team.name)}</h2><small>${esc(t.team.country || '')}</small></div></div>
       <div class="tabs">${tabs.map(x => `<button class="${st.teamTab === x ? 'on' : ''}" data-set="teamTab=${x}">${x}</button>`).join('')}</div></div>`;
     app.innerHTML = head + loading();
@@ -350,7 +359,7 @@ async function pageMatch(id) {
     let body = '';
     const mt = st.matchTab;
     if (mt === 'Overview') body = `<div class="group"><div class="sw"><b>Key events</b><label style="color:var(--mut)"><input type="checkbox" data-subs ${st.subs ? 'checked' : ''}> Substitutions</label></div><div class="divider">KO ${fmtTime(f.fixture.date)}</div>${eventsHtml(f, false)}${done ? `<div class="divider">FT (${f.goals.home}-${f.goals.away})</div>` : ''}</div>`;
-    else if (mt === 'Live') { body = `<div class="group"><div class="sw"><b>${live ? 'Live updates' : 'Match timeline'}</b><label style="color:var(--mut)"><input type="checkbox" data-subs ${st.subs ? 'checked' : ''}> Substitutions</label></div>${eventsHtml(f, true)}</div>`; if (live) timer = setInterval(route, 30000); }
+    else if (mt === 'Live') { body = `<div class="group"><div class="sw"><b>${live ? 'Live updates' : 'Match timeline'}</b><label style="color:var(--mut)"><input type="checkbox" data-subs ${st.subs ? 'checked' : ''}> Substitutions</label></div>${eventsHtml(f, true)}</div>`; if (live) timer = setInterval(() => { if (!document.hidden) route(); }, 60000); }
     else if (mt === 'Line-up') body = pitchHtml(f);
     else if (mt === 'Stats') body = statsHtml(f);
     else if (mt === 'Table') {
@@ -389,7 +398,7 @@ window.addEventListener('hashchange', () => {
 if (tg && tg.BackButton) tg.BackButton.onClick(() => history.back());
 
 document.addEventListener('click', e => {
-  const t = e.target.closest('[data-bell],[data-fav],[data-set],[data-back],[data-go],[data-reload],[data-cal]');
+  const t = e.target.closest('[data-bell],[data-fav],[data-set],[data-back],[data-go],[data-reload],[data-cal],[data-saver]');
   if (!t) return;
   if (t.dataset.bell) { toggleRem(+t.dataset.bell); t.classList.toggle('on'); if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light'); e.stopPropagation(); return; }
   if (t.dataset.fav) { const [ty, id] = t.dataset.fav.split(':'); toggleFav(ty, id); t.textContent = isFav(ty, id) ? '★' : '☆'; if (st.favTab && location.hash === '#/fav') route(); return; }
@@ -397,6 +406,7 @@ document.addEventListener('click', e => {
   if (t.dataset.back !== undefined) { history.back(); return; }
   if (t.dataset.reload !== undefined) { try { Object.keys(localStorage).filter(k => k.startsWith('c:')).forEach(k => localStorage.removeItem(k)); } catch {} route(); return; }
   if (t.dataset.cal !== undefined) { const c = document.getElementById('cal'); c.hidden = false; c.style.cssText = 'position:fixed;opacity:0;top:0'; try { c.showPicker(); } catch { c.click(); } return; }
+  if (t.dataset.saver !== undefined) { store.set('saver', !saver()); route(); return; }
   if (t.dataset.go) location.hash = t.dataset.go;
 });
 document.addEventListener('change', e => {
