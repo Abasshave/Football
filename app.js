@@ -24,18 +24,27 @@ const MEDIA = 'https://media.api-sports.io/football/';
 const num = v => parseFloat(String(v ?? 0).replace('%', '')) || 0;
 const PRIORITY = [39, 2, 140, 3, 61, 78, 135, 848, 1, 6, 203];
 
+let chain = Promise.resolve();
+const run = fn => { const p = chain.then(fn); chain = p.then(() => new Promise(r => setTimeout(r, 500)), () => new Promise(r => setTimeout(r, 500))); return p; };
 async function api(path, ttl = 300, map) {
   const key = 'c:' + path;
   const hit = store.get(key);
   if (hit && Date.now() - hit.t < ttl * 1000) return hit.d;
   let j;
-  try {
-    const r = await fetch(C.BASE + path);
-    if (!r.ok) throw new Error('Server error ' + r.status);
-    j = await r.json();
-    const errs = j.errors && (Array.isArray(j.errors) ? j.errors : Object.values(j.errors));
-    if (errs && errs.length) throw new Error(errs.join(' | '));
-  } catch (e) { if (hit) return hit.d; throw e; }
+  for (let tries = 0; ; tries++) {
+    try {
+      const r = await run(() => fetch(C.BASE + path));
+      if (!r.ok) throw new Error('Server error ' + r.status);
+      j = await r.json();
+      const errs = j.errors && (Array.isArray(j.errors) ? j.errors : Object.values(j.errors));
+      if (errs && errs.length) throw new Error(errs.join(' | '));
+      break;
+    } catch (e) {
+      if (hit) return hit.d;
+      if (tries < 2 && /too many requests|rate limit/i.test(e.message)) { await new Promise(r => setTimeout(r, 12000)); continue; }
+      throw e;
+    }
+  }
   let d = j.response || [];
   if (map) d = map(d);
   store.set(key, { t: Date.now(), d });
@@ -93,11 +102,11 @@ function groupedByLeague(list) {
 /* ---------- pages ---------- */
 async function pageMatches() {
   const days = [];
-  for (let i = -2; i <= 4; i++) {
+  for (let i = -1; i <= 1; i++) {
     const d = new Date(Date.now() + i * 864e5);
     days.push({ k: ymd(d), l: i === -1 ? 'Yesterday' : i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : fmtDate(d, { weekday: 'short', day: 'numeric', month: 'short' }) });
   }
-  if (!st.day) st.day = days[2].k;
+  if (!st.day) st.day = days[1].k;
   if (st.day !== 'live' && !days.find(d => d.k === st.day)) days.push({ k: st.day, l: fmtDate(st.day, { day: 'numeric', month: 'short' }) });
   const strip = `<div class="chips"><button class="chip live ${st.day === 'live' ? 'on' : ''}" data-set="day=live">Live</button>${days.map(d => `<button class="chip ${st.day === d.k ? 'on' : ''}" data-set="day=${d.k}">${d.l}</button>`).join('')}<button class="chip" data-cal>📅</button></div>`;
   app.innerHTML = topBar() + strip + loading();
@@ -405,7 +414,7 @@ document.addEventListener('click', e => {
   if (t.dataset.set) { const [k, ...v] = t.dataset.set.split('='); st[k] = v.join('='); route(); return; }
   if (t.dataset.back !== undefined) { history.back(); return; }
   if (t.dataset.reload !== undefined) { try { Object.keys(localStorage).filter(k => k.startsWith('c:')).forEach(k => localStorage.removeItem(k)); } catch {} route(); return; }
-  if (t.dataset.cal !== undefined) { const c = document.getElementById('cal'); c.hidden = false; c.style.cssText = 'position:fixed;opacity:0;top:0'; try { c.showPicker(); } catch { c.click(); } return; }
+  if (t.dataset.cal !== undefined) { const c = document.getElementById('cal'); c.min = ymd(Date.now() - 864e5); c.max = ymd(Date.now() + 864e5); c.hidden = false; c.style.cssText = 'position:fixed;opacity:0;top:0'; try { c.showPicker(); } catch { c.click(); } return; }
   if (t.dataset.saver !== undefined) { store.set('saver', !saver()); route(); return; }
   if (t.dataset.go) location.hash = t.dataset.go;
 });
