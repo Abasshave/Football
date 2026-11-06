@@ -1,21 +1,115 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<title>ScoreNest</title>
-<script src="https://telegram.org/js/telegram-web-app.js"></script>
-<link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Phoenix Football Scores</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚽</text></svg>">
 </head>
 <body>
-<div id="app"></div>
-<nav id="nav">
-  <button data-go="#/matches" data-tab="matches"><span>⚽</span>Matches</button>
-  <button data-go="#/fav" data-tab="fav"><span>★</span>Favourites</button>
-  <button data-go="#/leagues" data-tab="leagues"><span>🏆</span>Leagues</button>
-</nav>
-<input type="date" id="cal" hidden>
-<script src="config.js"></script>
-<script src="app.js"></script>
+  <header>
+    <div class="container header-inner">
+      <div class="logo">
+        <span class="logo-icon">⚽</span>
+        <span class="logo-text">Phoenix <span>Football</span></span>
+      </div>
+      <nav>
+        <button class="nav-btn active" data-view="live">Live & Today</button>
+        <button class="nav-btn" data-view="standings">Standings</button>
+        <button class="nav-btn" data-view="following">Following</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- API Key Banner -->
+    <div id="api-banner" class="api-banner hidden">
+      <p>
+        <strong>Add your free API key</strong> from 
+        <a href="https://www.football-data.org/client/register" target="_blank">football-data.org</a> 
+        to unlock live data. (Takes 30 seconds)
+      </p>
+      <div class="api-input-row">
+        <input type="text" id="api-key-input" placeholder="Paste your API key here" />
+        <button id="save-api-key">Save Key</button>
+      </div>
+      <p class="small">Your key is stored only in your browser (localStorage).</p>
+    </div>
+
+    <!-- Live / Today View -->
+    <section id="view-live" class="view active">
+      <div class="section-header">
+        <h1>Matches (Last 3 + Next 7 days)</h1>
+        <div class="filters">
+          <select id="competition-filter">
+            <option value="all">All Competitions</option>
+            <option value="CL">Champions League</option>
+            <option value="PL">Premier League</option>
+            <option value="PD">La Liga</option>
+            <option value="SA">Serie A</option>
+            <option value="BL1">Bundesliga</option>
+            <option value="FL1">Ligue 1</option>
+            <option value="ELC">Championship</option>
+            <option value="DED">Eredivisie</option>
+            <option value="PPL">Primeira Liga</option>
+            <option value="BSA">Brazil Serie A</option>
+            <option value="TSL">Süper Lig (Turkey)</option>
+          </select>
+          <button id="refresh-btn" class="icon-btn" title="Refresh">↻</button>
+        </div>
+      </div>
+
+      <div id="matches-container" class="matches-grid">
+        <div class="loading">Loading matches...</div>
+      </div>
+    </section>
+
+    <!-- Standings View -->
+    <section id="view-standings" class="view">
+      <div class="section-header">
+        <h1>League Standings</h1>
+        <select id="standings-competition">
+          <option value="CL">Champions League</option>
+          <option value="PL">Premier League</option>
+          <option value="PD">La Liga</option>
+          <option value="SA">Serie A</option>
+          <option value="BL1">Bundesliga</option>
+          <option value="FL1">Ligue 1</option>
+          <option value="ELC">Championship</option>
+          <option value="DED">Eredivisie</option>
+          <option value="PPL">Primeira Liga</option>
+          <option value="BSA">Brazil Serie A</option>
+          <option value="TSL">Süper Lig (Turkey)</option>
+        </select>
+      </div>
+      <div id="standings-container">
+        <div class="loading">Select a league...</div>
+      </div>
+    </section>
+
+    <!-- Following View -->
+    <section id="view-following" class="view">
+      <div class="section-header">
+        <h1>Following</h1>
+        <p class="subtitle">Teams you follow appear here. Click ⭐ on any match to follow a team.</p>
+      </div>
+      <div id="following-container">
+        <div class="empty-state">
+          <p>You are not following any teams yet.</p>
+          <p>Go to Live scores and click the star next to a team.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container">
+      <p>Built as a free alternative to Phoenix Browser Football section.</p>
+      <p>Data by <a href="https://www.football-data.org" target="_blank">football-data.org</a> • Free for major leagues</p>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
 </body>
 </html>
